@@ -1,8 +1,8 @@
 run: $(exec)
-	$(exec)
+	bin/$(exec)
 
 main: $(file)
-	g++ $(file) -o $(exec) -Wall -fsanitize=address
+	g++ $(file) -o ./bin/$(exec) -Wall -fsanitize=address
 
 clean:
 	rm $(exec)

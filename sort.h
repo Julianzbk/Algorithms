@@ -1,5 +1,16 @@
 #pragma once
 
+#include <iostream>
+#include <iomanip>
+using std::cout, std::endl;
+#include <vector>
+#include <algorithm>
+#include <random>
+
+#include "timer.h"
+#include "unordered_list.h"
+#include "heap.h"
+
 #define Vector std::vector<T> 
 
 namespace utilities
@@ -27,7 +38,6 @@ namespace utilities
         }
         return true;
     }
-
 
     template <typename T>
     std::ostream& operator << (std::ostream& out, std::vector<T> v)
@@ -115,4 +125,39 @@ namespace utilities
     }
 };
 
+template <typename T>
+void pq_sort(Vector& A);
 
+template <typename T>
+void insertion_sort(Vector& A);
+
+template <typename T>
+void bubble_sort(Vector& A);
+
+template <typename T>
+void selection_sort(Vector& A);
+
+template <typename T>
+void divide(Vector& A, size_t begin, size_t end, std::string side); // end is index of last elem in range
+
+template <typename T>
+void merge_sort(Vector& A);
+
+template <typename T>
+void quicksort(Vector& A);
+
+template <typename T>
+void heapify(ArrayHeap<T>& A);
+
+template <typename T>
+void heap_sort(Vector& A);
+
+template <typename T>
+void five_sort(Vector& A);
+
+void bucket_sort(std::vector<int>& A, size_t num_buckets, size_t min, size_t max);
+
+template <typename T>
+void radix_sort(Vector& A, size_t num_buckets, size_t min, size_t max);
+
+std::vector<int> counting_sort(std::vector<int>& A, int max);

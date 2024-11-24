@@ -16,9 +16,14 @@ struct TreeNode
 };
 
 template <typename T>
-class TreeHeap // MinHeap
+class TreeHeap // MaxHeap
 {
-    using Node = TreeNode<T>; 
+    using Node = TreeNode<T>;
+
+    TreeHeap(std::vector<T> arr)
+    {
+        
+    }
 };
 
 template <typename T>
@@ -87,11 +92,12 @@ std::ostream& operator << (std::ostream& out, TreeHeap<T> N)
     return out;
 }
 
+/*
 template <typename T>    
 std::ostream& operator << (std::ostream& out, ArrayHeap<T>& A)
 {
     A.print(out);
     return out;
 }
-
+*/
 
