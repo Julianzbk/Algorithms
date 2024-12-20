@@ -102,6 +102,70 @@ public:
         ListNode<T>::remove(data, head);
     }
 
+    T find_max()
+    {
+        if (head == nullptr)
+            throw std::domain_error("UnorderedList is empty");
+        T max_elem = head->data;
+        for (ListNode<T>* curr = head->next; curr != nullptr; curr = curr->next)
+        {
+            if (curr->data > max_elem)
+            {
+                max_elem = curr->data;
+            }
+        }
+        return max_elem;
+    }
+
+    T find_min()
+    {
+        if (head == nullptr)
+            throw std::domain_error("UnorderedList is empty");
+        T min_elem = head->data;
+        for (ListNode<T>* curr = head->next; curr != nullptr; curr = curr->next)
+        {
+            if (curr->data < max_elem)
+            {
+                min_elem = curr->data;
+            }
+        }
+        return min_elem;
+    }
+
+
+    T pop_max()
+    {
+        if (head == nullptr)
+            throw std::domain_error("UnorderedList is empty");
+        T max_elem = head->data;
+        ListNode<T>* curr = head->next; // already looked at head,
+        ListNode<T>* prev = head;       // now looking after it
+        ListNode<T>* max_ptr = head;    // though the min_elem is stil at head
+        ListNode<T>* max_prev = nullptr;// and there is no prev for that node
+        for (curr = head->next; curr != nullptr; curr = curr->next)
+        {
+            if (curr->data > max_elem)
+            {
+                max_ptr = curr;
+                max_prev = prev;
+                max_elem = curr->data;
+            }
+            prev = curr;
+        }
+        if (max_prev != nullptr)
+            max_prev->next = max_ptr->next; // unlinks the max_ptr node
+        else // == max_ptr is head OR max_ptr is only node
+        {
+            if (max_ptr == head)
+                head = max_ptr->next;
+            else
+                head = nullptr;
+        }
+        delete max_ptr;
+        return max_elem;
+
+    }
+
     T pop_min()
     {
         if (head == nullptr)

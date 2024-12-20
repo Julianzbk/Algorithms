@@ -19,10 +19,19 @@ std::ostream& operator << (std::ostream& out, std::vector<T> const& v)
 
 using Vertex = int;
 
+#include "unordered_list.h"
+using List = UnorderedList // might wanna change to a sorted array for denser graphs.
+
 struct Edge
 {
     Vertex begin;
     Vertex end;
+    
+    bool operator < (Edge other)
+    {
+        return begin == other.begin && end < other.end;
+    }
+
     friend std::ostream& operator << (std::ostream& out, Edge const& E)
     {
         out << "E(" << E.begin << ", " << E.end << ")";
@@ -33,11 +42,18 @@ struct Edge
 struct Graph
 {
     std::vector<Edge> EdgeList;
+    std::vector<List<int>> AdjList;
     int n;
 
     Graph(std::vector<Edge> const& EdgeList, int n)
-        :EdgeList(EdgeList), n(n)
+        :EdgeList(EdgeList), AdjList(std::vector<Vertex>(n)), n(n)
     {
+        for (Edge e: EdgeList)
+        {
+            List<int>& neighbors;
+            if (!neighbors.find(e.end))
+                neighbors.push(e.end);
+        }
     }
 
     friend std::ostream& operator << (std::ostream& out, Graph const& G)
@@ -67,12 +83,19 @@ struct WeirdTree
     }
 };
 
-std::vector<Vertex> DFS(std::vector<Edge> const& E, Vertex begin, std::vector<bool>& visited)
+void DFS_recursive
+    (std::vector<List<int>> const& AdjList, Vertex curr, std::vector<bool>& visited)
 {
+    visited[curr] = true;
+    Vertex neighbor = AdjList[curr].find_min(); // adjust neighbor exploring policy here.
+    if (!visited[neighbor])
+    {
+        DFS_recursive(AdjList, neighbor, visited);
+    }
 }
 
+/*
 //#include "matrix.hpp"
-#include "unordered_list.h"
 struct SparseGraph
 {
     //Matrix<int> AdjMatrix;
@@ -100,7 +123,7 @@ struct SparseGraph
         return out;
     }
 };
-
+*/
 
 int main()
 {

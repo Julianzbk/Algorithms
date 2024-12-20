@@ -47,7 +47,7 @@ struct HuffTree
 {
     TreeNode* root;
 
-    HuffTree() = default;
+    HuffTree() = default; 
 
     HuffTree(std::map<char, int> freq)
         :root(nullptr)
@@ -91,12 +91,29 @@ private:
         delete root;
     }
 
+    static void repr_tree(TreeNode* root, std::ostream& out)
+    {// pre-order traversal
+        if (root == nullptr)
+            return;
+        out << *root << " "; 
+        repr_tree(root->left, out);
+        repr_tree(root->right, out);
+    }
+
 public: 
     ~HuffTree()
     {
         delete_tree(root);
     }
+    
+    friend std::ostream& operator << (std::ostream& out, HuffTree const& T);
 };
+
+std::ostream& operator << (std::ostream& out, HuffTree const& T)
+{
+    HuffTree::repr_tree(T.root, out);
+    return out;
+}
 
 struct FileEncoder
 {
@@ -107,8 +124,14 @@ struct FileEncoder
     FileEncoder() = default;
 
     FileEncoder(const char* path)
-        :path(path), freq(), tree()
+        :path(path), freq(get_freq(path)), tree(freq)
     {
+        cout << tree << endl;
+    }
+
+    static std::map<char, int> get_freq(const char* path)
+    {
+        std::map<char, int> freq;
         std::ifstream fin(path);
         for (std::string line; getline(fin, line); )
         {
@@ -116,9 +139,20 @@ struct FileEncoder
                 ++freq[c]; 
         }
         fin.close();
-        cout << "hiii" << endl;
-        tree = HuffTree(freq);
+        return freq;
     }
+    
+    void to_huff(const char* out_path, const char* tree_path)
+    {
+        std::ifstream fin(out_path);
+        std::ofstream fout(out_path);
+        
+    }
+
+    void from_huff()
+    {
+    }
+
 
     void write(std::string const& d, const char* path)
     {
@@ -142,5 +176,5 @@ int main(int argc, char* argv[])
         cout << key << " " << value << "\n";
     }
 
-    cout << encoder.tree.root->freq << endl;
+    cout << encoder.tree << endl;
 }
