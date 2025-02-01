@@ -1,6 +1,10 @@
 #include <iostream>
 using std::cout, std::endl;
 
+#include <format>
+#include <algorithm>
+#include <numeric>
+
 #include <vector>
 template <typename T>
 std::ostream& operator<< (std::ostream& out, std::vector<T> v)
@@ -16,11 +20,32 @@ std::ostream& operator<< (std::ostream& out, std::vector<T> v)
     out << ']';
     return out;
 }
+#include <list>
+template <typename T>
+std::ostream& operator<< (std::ostream& out, std::list<T> L)
+{
+    out << '[';
+    auto it = L.begin();
+    for (; it != std::prev(L.end()); ++it)
+    {
+        out << *it << ", ";
+    }
+    out << *it;
+    out << ']';
+    return out;
+}
+#include <map>
+std::ostream& operator<< (std::ostream& out, std::map<unsigned int, unsigned int> M)
+{
+    out << '{';
+    for (auto [key, value]: M)
+    {
+        out << std::format("P{}: {}, ", key, value);
+    }
+    out << "\b\b}";
+    return out;
+}
 #include <tuple>
-
-#include <format>
-#include <algorithm>
-#include <numeric>
 
 constexpr std::string UNIT = "ms";
 
@@ -95,7 +120,7 @@ struct Process
 };
 
 class ProcessTable
-    :public std::vector<Process>
+    :public std::list<Process>
 {
     struct _Process_noid
     {
@@ -114,33 +139,42 @@ class ProcessTable
         }
     };
 public:
-    using std::vector<Process>::size;
+    using std::list<Process>::size;
 
-    ProcessTable(std::vector<_Process_noid> table)
-        :std::vector<Process>(table.size())
+    ProcessTable(std::initializer_list<_Process_noid> table)
+        :std::list<Process>()
     {
-        for (unsigned int i = 0; i < table.size(); ++i)
+        unsigned int i = 0;
+        for (_Process_noid const& proc: table)
         {
-            _Process_noid const& process = table[i];
-            if (process.has_negative_fields())
-                throw std::domain_error("Negative values");
-            this->at(i) = Process(i + 1,
-                                  process.arrival_time,
-                                  process.burst_time,
-                                  process.priority);
+            if (proc.has_negative_fields())
+                throw std::out_of_range("Negative Process fields");
+            this->push_back(Process(i + 1,
+                                    proc.arrival_time,
+                                    proc.burst_time,
+                                    proc.priority));
+            ++i;
         }
     }
 
-    friend std::ostream& operator << (std::ostream& out, ProcessTable const& P)
+    ProcessTable(std::vector<Process> table) // cant believe this worked LMAO
+        :std::list<Process>()
+    {
+        for (Process proc: table)
+        {
+            this->push_back(proc);
+        }
+    }
+
+    friend std::ostream& operator << (std::ostream& out, ProcessTable const& L)
     {
         out << "Table[\n";
-        int i = 0;
-        int size = P.size();
-        for (; i < size - 1; ++i)
+        auto it = L.begin();
+        for (; it != std::prev(L.end()); ++it)
         {
-            out << P[i] << ",\n";
+            out << *it << ",\n";
         }
-        out << P[size - 1];
+        out << *it;
         out << "\n]";
         return out;
     }
@@ -151,17 +185,16 @@ class Scheduler
 {
 public:
     std::string name;
+protected:
     ProcessTable table;
     unsigned int total_burst_time;
-    std::vector<unsigned int> waiting_times;
-    std::vector<unsigned int> turnaround_times;
+    std::map<unsigned int, unsigned int> waiting_times; // <PID, time>
+    std::map<unsigned int, unsigned int> turnaround_times; // <PID, time>
     
-    void check_for_arrival(unsigned int t, unsigned int begin_checking_at,
-                                         unsigned int last_process_id = -1)
+    void check_for_arrival(unsigned int t, unsigned int last_process_id = -1)
     {
-        for (size_t i = begin_checking_at; i < table.size(); ++i)
+        for (Process const& proc: table)
         {
-            Process const& proc = table[i];
             if (t > proc.arrival_time)
             {
                 cout << std::format("t = {}: Process {} arrived", proc.arrival_time, proc.id);
@@ -169,33 +202,36 @@ public:
                     cout << std::format(" during execution of Process {} \n", last_process_id);
                 else
                     cout << endl;
-                ++begin_checking_at;
             }
         }
     }
 
 #pragma region utilities
-    Process const& select_first_process(unsigned int t, unsigned int begin_checking_at) const
+    auto select_first_process(unsigned int t) const
     {/*
         Selects the first Process in (sorted according to scheduling policy) this->table
         that has arrived before current time t.
         returns the frontmost Process in table if none has arrived.
+        (return type is const iterator to Process)
      */
-        for (size_t i = begin_checking_at; i < table.size(); ++i)
+        for (auto proc = table.cbegin(); proc != table.cend(); ++proc)
         {
-            Process const& proc = table[i];
-            if (t >= proc.arrival_time)
+            if (t >= proc->arrival_time)
             {
-                ++begin_checking_at;
                 return proc;
             }
         }
-        return table[0];
+        return table.cbegin();
     }
     
-    static inline unsigned int sum(std::vector<unsigned int> const& V)
+    static double average(std::map<unsigned int, unsigned int> const& M)
     {
-        return std::accumulate(V.begin(), V.end(), 0);
+        double acc = 0.0;
+        for (auto [PID, t]: M)
+        {
+            acc += t;
+        }
+        return acc / M.size();
     }
     
     static inline std::string format_time(unsigned int t)
@@ -204,14 +240,15 @@ public:
     }
 
 #pragma endregion utilities
-
+public:
     Scheduler(ProcessTable const& table, std::string name = "InvalidBaseScheduler")
-        :name(name), table(table), total_burst_time(0),
-         waiting_times(table.size()), turnaround_times(table.size())
+        :name(name), table(table), total_burst_time(0)
     {
-        for (Process const& p: table)
+        for (Process const& proc: table)
         {
-            total_burst_time += p.burst_time;
+            waiting_times[proc.id] = 0;
+            turnaround_times[proc.id] = 0;
+            total_burst_time += proc.burst_time;
         }
     }
 
@@ -242,36 +279,37 @@ public:
 
         auto cmp_arrival = [](Process const& lhs, Process const& rhs)
                            {return lhs.arrival_time < rhs.arrival_time;};
-        std::stable_sort(table.begin(), table.end(), cmp_arrival);
-        size_t proc_i = 0;
+        table.sort(cmp_arrival); // stable sort too!
         for (unsigned int t = 0; t < total_burst_time; )
         {
-            Process const& proc = select_first_process(t, proc_i);
+            auto _proc_it = select_first_process(t);
+            Process const& proc = *_proc_it;
             if (t < proc.arrival_time) // then Process has not arrived;
                 t = proc.arrival_time; // wait till Process arrives;
             
             cout << TIME << "Process " << proc.id << " began\n";
-            waiting_times[proc_i] = t - proc.arrival_time;
+            waiting_times[proc.id] = t - proc.arrival_time;
 
             t += proc.burst_time;
-            check_for_arrival(t, proc_i + 1, proc.id);
+            check_for_arrival(t, proc.id);
             cout << TIME << std::format("Process {} finished ({}{})\n", proc.id, proc.burst_time, UNIT);
-            turnaround_times[proc_i] = t - proc.arrival_time;
+            turnaround_times[proc.id] = t - proc.arrival_time;
 
-            ++proc_i;
+            table.erase(_proc_it); // Finished processes are removed.
         }
+        cout << "All processes finished in " << total_burst_time << UNIT << endl;
     }
 
     virtual double avg_waiting_time() override
     {
         cout << waiting_times << endl;
-        return sum(waiting_times) / table.size();
+        return average(waiting_times);
     }
 
     virtual double avg_turnaround_time() override
     {
         cout << turnaround_times << endl;
-        return sum(turnaround_times) / table.size();
+        return average(turnaround_times);
     }
 };
 
@@ -279,7 +317,7 @@ public:
 class SJF_Scheduler // non-preemptive
     :public Scheduler
 {
-public:
+public:    
     SJF_Scheduler(ProcessTable const& table)
         :Scheduler(table, "Shortest-Job-First")
     {
@@ -291,43 +329,191 @@ public:
 
         auto cmp_burst = [](Process const& lhs, Process const& rhs)
                          {return lhs.burst_time < rhs.burst_time;};
-        std::stable_sort(table.begin(), table.end(), cmp_burst);
-        cout << table << endl;
-        size_t proc_i = 0;
+        table.sort(cmp_burst);
         for (unsigned int t = 0; t < total_burst_time; )
         {
-            Process const& proc = select_first_process(t, proc_i);
+            auto _proc_it = select_first_process(t);
+            Process const& proc = *_proc_it;
+
             if (t < proc.arrival_time) // then Process has not arrived;
                 t = proc.arrival_time; // wait till Process arrives;
             cout << TIME << "Process " << proc.id << " began\n";
-            waiting_times[proc_i] = t - proc.arrival_time;
+            waiting_times[proc.id] = t - proc.arrival_time;
 
             t += proc.burst_time;
-            check_for_arrival(t, proc_i + 1, proc.id);
+            check_for_arrival(t, proc.id);
             cout << TIME << std::format("Process {} finished ({}{})\n", proc.id, proc.burst_time, UNIT);
-            turnaround_times[proc_i] = t - proc.arrival_time;
+            turnaround_times[proc.id] = t - proc.arrival_time;
 
-            ++proc_i;
+            table.erase(_proc_it); // Finished processes are removed.
         }
+        cout << "All processes finished in " << total_burst_time << UNIT << endl;
     }
 
     virtual double avg_waiting_time() override
     {
         cout << waiting_times << endl;
-        return sum(waiting_times) / table.size();
+        return average(waiting_times);
     }
 
     virtual double avg_turnaround_time() override
     {
         cout << turnaround_times << endl;
-        return sum(turnaround_times) / table.size();
+        return average(turnaround_times);
+    }
+};
+
+/*
+class SRTF_Scheduler // preemptive
+    :public Scheduler
+{
+public:    
+    SRTF_Scheduler(ProcessTable const& table)
+        :Scheduler(table, "Shortest-Remaining-Time-First (Preemptive SJF)")
+    {
+    }
+
+    virtual void schedule() override
+    {
+        #define TIME format_time(t)
+
+        auto cmp_burst = [](Process const& lhs, Process const& rhs)
+                         {return lhs.burst_time < rhs.burst_time;};
+        table.sort(cmp_burst);
+        for (unsigned int t = 0; t < total_burst_time; )
+        {
+            auto _proc_it = select_first_process(t);
+            Process const& proc = *_proc_it;
+
+            if (t < proc.arrival_time) // then Process has not arrived;
+                t = proc.arrival_time; // wait till Process arrives;
+            cout << TIME << "Process " << proc.id << " began\n";
+            waiting_times[proc.id] = t - proc.arrival_time;
+
+            t += proc.burst_time;
+            check_for_arrival(t, proc.id);
+            cout << TIME << std::format("Process {} finished ({}{})\n", proc.id, proc.burst_time, UNIT);
+            turnaround_times[proc.id] = t - proc.arrival_time;
+
+            table.erase(_proc_it); // Finished processes are removed.
+        }
+        cout << "All processes finished in " << total_burst_time << UNIT << endl;
+    }
+
+    virtual double avg_waiting_time() override
+    {
+        cout << waiting_times << endl;
+        return average(waiting_times);
+    }
+
+    virtual double avg_turnaround_time() override
+    {
+        cout << turnaround_times << endl;
+        return average(turnaround_times);
+    }
+};
+*/
+
+
+class RR_Scheduler // non-preemptive
+    :public Scheduler
+{
+    std::vector<unsigned int> arrived_procs;
+    std::vector<unsigned int> began_procs;
+    inline bool has_not_arrived(unsigned int PID)
+    {
+        return std::find(arrived_procs.begin(), arrived_procs.end(), PID) == arrived_procs.end();
+    }
+
+    inline bool has_not_begun(unsigned int PID)
+    {
+        return std::find(began_procs.begin(), began_procs.end(), PID) == began_procs.end();
+    }
+
+
+    void check_for_arrival(unsigned int t, unsigned int last_process_id = -1)
+    {
+        for (Process const& proc: table)
+        {
+            if (t > proc.arrival_time && has_not_arrived(proc.id))
+            {
+                cout << std::format("t = {}: Process {} arrived", proc.arrival_time, proc.id);
+                arrived_procs.push_back(proc.id);
+                if (last_process_id != std::numeric_limits<unsigned int>::max())
+                    cout << std::format(" during execution of Process {} \n", last_process_id);
+                else
+                    cout << endl;
+            }
+        }
+    }
+public:
+    unsigned int quantum;
+
+    RR_Scheduler(unsigned int quantum, ProcessTable const& table)
+        :Scheduler(table, std::format("Round Robin (quantum = {})", quantum)),
+         quantum(quantum)
+    {
+        arrived_procs.reserve(table.size());
+        began_procs.reserve(table.size());
+    }
+
+    virtual void schedule() override
+    {
+        #define TIME format_time(t)
+
+        for (unsigned int t = 0; t < total_burst_time; )
+        {
+            for (auto _proc_it = table.begin(); _proc_it != table.end(); ++_proc_it)
+            {
+                Process& proc = *_proc_it;
+                if (t < proc.arrival_time) // then Process has not arrived;
+                    continue;
+                if (has_not_begun(proc.id))
+                {
+                    cout << TIME << "Process " << proc.id << " began\n";
+                    waiting_times[proc.id] = t - proc.arrival_time;
+                    began_procs.push_back(proc.id);
+                }
+                else
+                {
+                    cout << TIME << "Process " << proc.id << " continuing\n";
+                }
+                // Process "execution" happens here
+                if (proc.burst_time <= quantum) // if remaining time is less than quantum,
+                {                              // Process finishes and is removed.
+                    t += proc.burst_time;
+                    check_for_arrival(t, proc.id);
+                    cout << TIME << std::format("Process {} finished ({}{})\n", proc.id, proc.burst_time, UNIT);
+                    turnaround_times[proc.id] = t - proc.arrival_time;                        
+                    table.erase(_proc_it);
+                    continue;
+                }
+                proc.burst_time -= quantum;
+                t += quantum;
+                check_for_arrival(t, proc.id);
+                cout << TIME << std::format("Process {} finished it's turn ({}{} remaining)\n", proc.id, proc.burst_time, UNIT);
+            }
+        }
+        cout << "All processes finished in " << total_burst_time << UNIT << endl;
+    }
+
+    virtual double avg_waiting_time() override
+    {
+        cout << waiting_times << endl;
+        return average(waiting_times);
+    }
+
+    virtual double avg_turnaround_time() override
+    {
+        cout << turnaround_times << endl;
+        return average(turnaround_times);
     }
 };
 
 
 void eval_all(ProcessTable const& table)
 {
-    Scheduler* schedulers[] = {new SJF_Scheduler(table)};
+    Scheduler* schedulers[] = {new RR_Scheduler(4, table)};
     for (Scheduler* sched: schedulers)
     {
         cout << sched->name << ":\n";
@@ -338,21 +524,64 @@ void eval_all(ProcessTable const& table)
     }    
 }
 
+#pragma region tests
 #include <cassert>
+#include <fstream>
+
 void test()
 {
+    bool PRINT = true;
+    #pragma region redirect_cout;
+    std::ofstream nullstream; // sorta UB
+    std::streambuf* backup_cout;
+    if (PRINT)
+    {
+        backup_cout = std::cout.rdbuf();
+        std::cout.rdbuf(nullstream.rdbuf());
+    }
+    #pragma endregion redirect_cout;
+
     ProcessTable table1({{0, 60, 3}, {3, 30, 2}, {4, 40, 1}, {9, 10, 4}});
+    {
     FCFS_Scheduler scheduler(table1);
     scheduler.schedule();
     assert(scheduler.avg_waiting_time() == 66.0);
     assert(scheduler.avg_turnaround_time() == 101.0);
+    }
+    {
+    FCFS_Scheduler scheduler({{0, 24}, {0, 3}, {0, 3}});
+    scheduler.schedule();
+    assert(scheduler.avg_waiting_time() == 17.0);
+    assert(scheduler.avg_turnaround_time() == 27.0);
+    }
+    {
+    SJF_Scheduler scheduler(table1);
+    scheduler.schedule();
+    assert(scheduler.avg_waiting_time() == 53.5);
+    assert(scheduler.avg_turnaround_time() == 88.5);
+    }
+    {
+    SJF_Scheduler scheduler(ProcessTable{{0, 6}, {2, 8}, {5, 7}, {0, 3}});
+    scheduler.schedule();
+    assert(scheduler.avg_waiting_time() == 5.25);
+    assert(scheduler.avg_turnaround_time() == 11.25);
+    }
+    
+    if (PRINT)
+    {
+        nullstream.close();
+        std::cout.rdbuf(backup_cout);
+    }
     cout << "All tests passed!\n* * * * * * * * * *" << endl;
 }
+#pragma endregion tests
+
 
 int main()
 {
-    //test();
+    // test();
     ProcessTable table1({{0, 60, 3}, {3, 30, 2}, {4, 40, 1}, {9, 10, 4}});
-    ProcessTable table2({{0, 24}, {0, 3}, {0, 3}});
-    eval_all(table1);
+    ProcessTable table2({{0, 53}, {0, 17}, {0, 68}, {0, 24}});
+    ProcessTable table3({{0, 24}, {0, 3}, {0, 3}});
+    eval_all(table3);
 }
